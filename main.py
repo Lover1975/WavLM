@@ -111,28 +111,21 @@ for i in range(0, len(wav_file_paths), batch_size):
         # print(batch_layer_results[j])
         # print("Layer Representations:")
         # print(batch_layer_reps[j])
-# Load labels
-# print("hi")
-# Flatten batch_representations list and convert to tensor
-print(f"all_features shape: {all_features.shape}")
+print(f"all_features shape: {len(all_features)}")
 print(f"Number of labels: {len(all_labels)}")
 print("\n\n\n\n\n\n\n\n")
-all_labels = torch.tensor(all_labels, dtype=torch.long)
-print(f"Number of labels: {len(all_labels)}")
-all_features = torch.cat([rep for batch in batch_representations for rep in batch], dim=0)
-print(f"all_features shape: {len(all_features)}")
-# print(labels_dict)
-# print("hello")
-# Get labels for the files you have
-# print(wav_file_paths)
 labels = [labels_dict[path] for path in wav_file_paths]
-# print("buuu")
-# Convert labels to numeric values
+print(len(labels))
 unique_speakers = list(set(labels))
 label_to_idx = {label: idx for idx, label in enumerate(unique_speakers)}
 numeric_labels = [label_to_idx[label] for label in labels]
 print(f"Number of labels: {len(labels)}")
 print(numeric_labels)
+all_labels = torch.tensor(numeric_labels, dtype=torch.long)
+print(f"Number of labels: {len(all_labels)}")
+all_features = torch.cat(all_features, dim=0)
+print(f"all_features shape: {all_features.shape}")
+
 
 # Split data into training, validation, and test sets
 train_features, test_features, train_labels, test_labels = train_test_split(
@@ -150,3 +143,58 @@ class SoftmaxClassifier(nn.Module):
     
     def forward(self, x):
         return self.fc(x)
+
+
+def calculate_accuracy(model, features, labels):
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        outputs = model(features)
+        _, predicted = torch.max(outputs, 1)  # Get the most likely class for each sample
+        correct = (predicted == labels).sum().item()  # Count the number of correct predictions
+        accuracy = correct / labels.size(0)  # Compute the accuracy
+    return accuracy
+
+input_dim = train_features.size(1)
+num_classes = len(unique_speakers)
+
+# Instantiate the classifier
+classifier = SoftmaxClassifier(input_dim, num_classes)
+
+# Define loss function and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(classifier.parameters(), lr=0.001)
+
+# Convert your data to PyTorch tensors if they aren't already
+train_features = train_features.clone().detach()
+val_features = val_features.clone().detach()
+train_labels = torch.tensor(train_labels, dtype=torch.long)
+val_labels = torch.tensor(val_labels, dtype=torch.long)
+
+# Train the classifier
+num_epochs = 10  # You can change this value
+for epoch in range(num_epochs):
+    classifier.train()  # Set the model to training mode
+    optimizer.zero_grad()  # Zero the gradient buffers
+    
+    # Forward pass
+    outputs = classifier(train_features)
+    loss = criterion(outputs, train_labels)
+    
+    # Backward pass and optimization
+    loss.backward()
+    optimizer.step()
+    
+    # Print loss for every epoch
+    print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item()}')
+    val_accuracy = calculate_accuracy(classifier, val_features, val_labels)
+    print(f'Validation Accuracy: {val_accuracy * 100:.2f}%')
+
+    # You could also add code here to compute accuracy on the validation set and possibly save the model if validation accuracy improves
+
+...
+
+# After training, you can use the classifier to make predictions on new data
+classifier.eval()  # Set the model to evaluation mode
+with torch.no_grad():
+    test_predictions = classifier(test_features)
+    test_predictions = torch.argmax(test_predictions, dim=1)  # Get the most likely class for each sample
